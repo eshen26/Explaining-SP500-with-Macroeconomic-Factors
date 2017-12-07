@@ -24,6 +24,7 @@ The data acquired for this project includes the following: \
 `7)` sp500.csv: \
 *Source*: https://finance.yahoo.com/quote/%5EGSPC/history/ \
 *Explanation*: SP500 historical daily data from Yahoo Finance - not the St. Louis Fed this time.
+
 \
 **2. Data Tidying and Wrangling**
 
