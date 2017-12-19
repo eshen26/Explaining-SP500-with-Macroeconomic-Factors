@@ -1,5 +1,5 @@
-# Stock_Market_Prediction
-Final project for STAT231: Data Science Fall 2017 at Amherst College.
+# Trying to explain the stock market: A look at the correlation between commodity prices, monetary supply and S&P 500 index.
+## Final project for STAT231: Data Science Fall 2017 at Amherst College.
 
 The detailed steps to reproducing the results of this project are as followed.
 
