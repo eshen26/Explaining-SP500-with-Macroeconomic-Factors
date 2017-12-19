@@ -32,8 +32,7 @@ Please download the raw data listed below from the corresponding links: \
 \
 **2. Data Tidying and Wrangling**\
 Please place the data_wrangling_final.r script in the same directory as the downloaded data above.\
-Then, run the script to acquire master.csv, which will be the "master table" used for data analysis and visualization.\
-Or, for convenience, the master.csv file could be downloaded from this repo as well.
+Then, run the script to acquire master.csv, which will be the "master table" used for data analysis and visualization.
 
 **3. Running Analysis in R Markdown File**\
 Please download the writeup_final.rmd file from this repo and place it in the same directory as master.csv. Make sure to set the working directory to that location.\
