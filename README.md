@@ -1,8 +1,12 @@
 # Stock_Market_Prediction
 Final project for STAT231: Data Science Fall 2017 at Amherst College.
 
-**1. Explanation of Data Acquired**
-The data acquired for this project includes the following: \
+The detailed steps to reproducing the results of this project are as followed.
+
+Before following the steps, please make sure to have the **tidyverse**, **lubridate**, **zoo** and **ggplot2** packages installed in your R environment.
+
+**1. Acquiring Data**
+Please download the raw data listed below from the corresponding links: \
 `1)` effective_federal_funds_rate.csv:\
 *Source*: https://fred.stlouisfed.org/series/DFF \
 *Explanation*: The federal funds rate is the interest rate at which depository institutions trade federal funds (balances held at Federal Reserve Banks) with each other overnight. \
@@ -27,4 +31,12 @@ The data acquired for this project includes the following: \
 
 \
 **2. Data Tidying and Wrangling**
+Please place the Data_wrangling_final.r script in the same directory as the downloaded data above.\
+Then, run the script to acquire master.csv, which will be the "master table" used for data analysis and visualization.\
 
+**3. Running Analysis in R Markdown File**
+Please place the writeup_final.rmd file in the same directory as master.csv.\
+Knit the writeup_final.rmd file to acquire a clean version of the write up. Most code chunks are hidden for the sake of succinctness and presentation.\
+
+**4. Final Result**
+The final result will be the writeup_final.html file knit from the rmd mentioned above. You will find this file in the same directory where the rmd file is located.
