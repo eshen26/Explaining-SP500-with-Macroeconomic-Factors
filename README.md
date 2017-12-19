@@ -6,7 +6,7 @@ The detailed steps to reproducing the results of this project are as followed.
 Before following the steps, please make sure to have the **tidyverse**, **lubridate**, **zoo** and **ggplot2** packages installed in your R environment.
 
 **1. Acquiring Data**
-Please download the raw data listed below from the corresponding links: \
+The raw data listed below were downloaded from the corresponding links: \
 `1)` effective_federal_funds_rate.csv:\
 *Source*: https://fred.stlouisfed.org/series/DFF \
 *Explanation*: The federal funds rate is the interest rate at which depository institutions trade federal funds (balances held at Federal Reserve Banks) with each other overnight. \
@@ -25,9 +25,11 @@ Please download the raw data listed below from the corresponding links: \
 `6)` prime_loans.csv:\
 *Source*: https://fred.stlouisfed.org/series/DPRIME \
 *Explanation*: Rate posted by a majority of top 25 (by assets in domestic offices) insured U.S.-chartered commercial banks. Prime is one of several base rates used by banks to price short-term business loans. \
-`7)` sp500.csv: \
+`7)` ^GSPC.csv: \
 *Source*: https://finance.yahoo.com/quote/%5EGSPC/history/ \
-*Explanation*: SP500 historical daily data from Yahoo Finance - not the St. Louis Fed this time.
+*Explanation*: SP500 historical daily data from Yahoo Finance - not the St. Louis Fed this time.\
+\
+The above data are in the repository. They have been renamed from their names as downloaded from sources for convenience.
 
 \
 **2. Data Tidying and Wrangling**\
