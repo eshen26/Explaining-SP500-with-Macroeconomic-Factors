@@ -1,0 +1,465 @@
+---
+title: 'Trying to explain the stock market: A look at the correlation between commodity
+  prices, monetary supply and S&P 500 index.'
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+Sys.timezone()
+```
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+master <- read.csv("master.csv")
+master$DATE <- as.Date(master$DATE)
+```
+# 1. Introduction
+
+## 1.1. Background and Motivation
+Understanding the behavior of the S&P 500 Index is a hot topic of inquiry among statisticians, data scientists, professional investors and traders. There had been voluminous literature trying to model S&P 500 Index using a combination of economic and financial data. Some of the researches we came across deployed advanced statistical tools like ARIMA (Autoregressive Integrated Moving Average Model), Double- and Multivariate- Exponential Smoothing, and machine learning algorithms like Genetic Algorithm, Monte Carlo Simulation and Gradient Boosting Machine. Many share one or both of these two aims: 
+
+* **1) to identify a set of factors that are can explain the S&P 500 Index.**     
+* **2) to develop a forecasting model to predict the SP500 Index. **
+
+Our project is a preliminary exploration in this domain to try *explain* SP500. That is, we will use regression model test the explanatory power of a set of economic/financial indicators on SP500, and to hopefully come up with a model so that if we can forecast these economic/financial indicators, we can make a reasonable prediction of SP500 as well. 
+
+
+# 2. Data Acquisition and Wrangling
+
+## 2.1. Data Acquisition: SP 500, Monetary Indicators, Commodity Indicators
+We downloaded daily S&P 500 data from Yahoo Finance as a handy CSV file. Then, using some macroeconomic research and intuition we decided on two sets of indictors that seems explanatory to stock market performances. All of them are available from Federal Reserve Economic Database:
+
+* Monetary Indicators:
+    + U.S. Federal Funds Rate
+    + U.S. Three Month Treasury Bill Secondary Market Rate
+    + U.S. Prime Loan Rate
+  
+* Commodity Indicators:
+    + Gold Price
+    + Crude Oil Price
+    + U.S. Dollar Index Against other Major Currencies
+  
+We work with a time horizon of 1982-2017 as it is the common time period where all data are available. A working hypothesis is that **Some or all of these indicators can explain the value of SP500**. We will use multiple linear regression, in conjunction with other methods, to evaluate this hypothesis. 
+
+## 2.2. Data Wrangling 
+### 2.2.1. Data Cleansing
+In this project, data cleansing is relatively straightforward. All files come in CSV format. Only some simple twists are required to put them in a ready-to-use data frame.
+
+* Here are the steps:
+ + 1. Remove all unnecessary columns from raw csv. 
+ + 2. Join the columns by date 
+ + 3. Filter to get a date range where all variables are available 
+ + 4. Reassign all data types to *numeric*
+ + 5. Rename data columns for more intuitive understanding
+ 
+### 2.2.2. Data Manipulation: Time Series
+The data involved in this project has a special feature: they are **time series**. Unlike the datasets we saw in class, where each row is an observation independent from its neighbors, in time series all observations are ordered and connected by a time sequence. In many cases, this ordering and connection implies that a time series data is composed of three components. I will use the time series of air temperature in Boston as an example:
+
+* **Trend**: the general direction of values over time (If there is global warming, we should be able to see that temperature has generally moved up.)
+* **Cyclical Patterns**: Recurring seasonal/cyclical up-and-downs (In a year, it’s always hotter in the summer and colder in the winter) 
+* **Noise**: Random fluctuation of by non-recurring random factors (some one-time solar, atmospheric or oceanic activity)
+
+For the purpose of this project, we are only interested in general **trends** in SP500 and our chosen indicators. So we need to remove **cycles** and **noise** if they exist.
+
+As for **cycles**, as you can see later in our univariate data visualization, we see *no clear cyclical pattern* in any of the seven time series. 
+
+To remove **noise**, we use the **moving average** technique. This technique transforms each value into an (unweighted) average of itself and n-1 observations before it. By taking this average, we eliminate most of the short term fluctuations. This manipulation is done with the function `zoo::rollmeanr`. The following code example calculates a 20-day moving average of SP500:
+
+```{r eval=FALSE}
+sp500_rn20=rollmeanr(joined$sp500, k=20, fill=NA)
+```
+
+The following graphs shows the curves as a resulting of moving average smoothing by factors of 20(monthly), 60(quarterly) and 120 (semiannual). 
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+start_time <- as.Date("2015-01-01")
+end_time <- as.Date("2016-06-30")
+start.end <- c(start_time, end_time)
+
+ggplot(master, aes(x=DATE)) + 
+ geom_line(aes(y = sp500_rn120, color = "SP500 RN120", group = 1)) +
+ geom_line(aes(y = sp500_rn60, color = "SP500 RN60", group = 1)) +
+ geom_line(aes(y = sp500_rn20, color = "SP500 RN20", group = 1)) +
+ geom_line(aes(y = sp500, color = "SP500", group = 1)) +
+  xlab("Date") + ylab("SP500 and Smoothed")+
+  #scale_x_date(limits = start.end)+
+  #coord_cartesian(ylim=c(1830,2130))+
+  scale_color_manual(values=c("slategray2","violetred1","darkorchid1","darkolivegreen"))+
+  ggtitle("Effect of Moving Average Smoothing: Global")
+```
+
+All three lines align pretty closely with the original sp500 data in this global graph. This confirms that moving average smoothing incurs no significant alteration in the long-term trend. Now let's see how it deals with short-term fluctuations. 
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+ggplot(master, aes(x=DATE)) + 
+ geom_line(aes(y = sp500_rn120, color = "SP500 RN120", group = 1)) +
+ geom_line(aes(y = sp500_rn60, color = "SP500 RN60", group = 1)) +
+ geom_line(aes(y = sp500_rn20, color = "SP500 RN20", group = 1)) +
+ geom_line(aes(y = sp500, color = "SP500", group = 1)) +
+  xlab("Date") + ylab("SP500 and Smoothed")+
+  scale_x_date(limits = start.end)+
+  coord_cartesian(ylim=c(1830,2130))+
+  scale_color_manual(values=c("slategray2","violetred1","darkorchid1","darkolivegreen"))+
+  ggtitle("Effect of Moving Average Smoothing: Close-up")
+  
+```
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+lm_smooth_120 <- lm(sp500_rn120 ~ interbank_rn120 + gold_rn120 + oil_rn120 + fx_rn120 + prime_loan_rate, data = master)
+
+lm_unsmoothed <- lm(sp500 ~ us_interbank_rate  + gold_price + crude_oil +fx_index + prime_loan_rate, data = master)
+
+lm_smooth_20 <- lm(sp500_rn20 ~ interbank_rn20 + gold_rn20 + oil_rn20 + fx_rn20 + prime_loan_rate, data = master)
+
+lm_smooth_60 <- lm(sp500_rn60 ~ interbank_rn60 + gold_rn60 + oil_rn60 + fx_rn60 + prime_loan_rate, data = master)
+```
+
+We can see that the moving average lines makes the curve much smoother, discounting many short-term fluctuations as we desired. 
+For further analysis we will choose the **120** smoothing factor. This is a somewhat arbitrary choice. We can choose anything as long as it preserves the long-term trend. As shown below, if we smooth all variables (except for prime loan rate, which doesn't fluctuate much), by each smoothing factor, smoothing everything by k=120 will give the highest adjusted r-squared. 
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+ats_smooth<-data.frame(
+  model=c("smooth_120D","unsmoothed","smooth_20D","smooth_60D"),
+  adjusted_R_square=c(0.619,0.5647,0.5789,0.5937)
+)
+
+ggplot(ats_smooth, aes(x = reorder(model, adjusted_R_square), y = adjusted_R_square)) + geom_bar(aes(fill = model), stat = "identity", width = 0.6) +
+  xlab("Model") + ylab("Adjusted R Square")+
+  coord_cartesian(ylim=c(0.5,0.65))+
+  ggtitle("Adjusted R Squared - Smoothing Factors")
+```
+
+In addition to moving average, we did several other manipulations. These manipulations prepare data for later exploration for a best fitting model. 
+
+* Rate of change (_roc): calculate the rate of change of each observation from the previous observation, 
+* First difference (_diff): calcualte the difference of each observation from the previous observation. 
+* Natural log (log(x)): though not explicitly a column in the data frame, later analysis utilized to natural log of sp500 index.
+
+# 3. Regression Analysis and Visualization
+
+## 3.1. Checking Potential Correlations Between Variables
+
+Before attempting to examine the explanatory power of any, or any combination of our factors against the smoothed SP500 (rn120), we must first examine if there exists any correlations between any of the predictors. Given the nature of how we selected our macroeconomic factors, factors of the same macroeconomic category i.e. monetary, commodities, etc. may be correlated to each other.
+If we include two strongly correlated factors into the same model, we would be increasing the complexity of the model with no additional explanatory power yielded. By the virtue of selecting the most succinct explanatory model possible, we perform correlation checking as a pre-processing stage for univariate/multivariate analysis we perform later.
+We performe pairwise correlation tests on both the monetary group and commodities group of factors, which sums up to three tests for each group, and six in total. One example is coded below.
+
+```{r, echo = TRUE, warning = FALSE, error = FALSE, tidy = TRUE}
+lm_monetary_correlation_1 <- lm(interbank_rn120 ~ tbill_rn120, data = master)
+summary(lm_monetary_correlation_1)
+```
+
+```{r, warning = FALSE, error = FALSE, tidy = TRUE}
+ggplot(master, aes(x=DATE)) + 
+ geom_line(aes(y = interbank_rn120, color = "Interbank Rate", group = 1)) + 
+ geom_line(aes(y = tbill_rn120/200, color = "Treasury Bill", group = 1)) +
+ scale_y_continuous(
+   "interbank_rn120", sec.axis = sec_axis(~.*200, name = "tbill_rn120"))
+```
+
+After having examined the correlation between each pair of factors within the same macroeconomic group, and having plotted them to gain an intuitive sense of how closely they align with each other, we construct a bar plot to visualize which pair of factors was the most correlated. We rank the pairs by the adjusted-R Squared statistic, as it best exemplifies how explanatory one factor is of the other.
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+
+ats_corr<-data.frame(
+  model=c("tb~interbank","tb~prime","interbank~prime","gold~oil","oil~fx","gold~fx"),
+  adjusted_R_square=c(0.9464,0.0394,0.001433,0.0636,0.1024,0.001729)
+)
+
+ggplot(ats_corr, aes(x = reorder(model, adjusted_R_square), y = adjusted_R_square)) + geom_bar(aes(fill = model), stat = "identity", width = 0.6) +
+  xlab("Model") + ylab("Adjusted R Square")+
+  coord_cartesian(ylim=c(0,1))+
+  ggtitle("Adjusted R Squared - Correlation Test")
+```
+
+By looking at this bar plot, we conclude that only treasury bill rates and interbank rates are strongly correlated, with an adjusted-R Squared of over 90%. All the other pairs seem to have weak, even wholly neglectable relationships with one another. Thus, we have grounds to take out treasury bill rates or interbank rates from our analysis, while keeping theothers.
+
+## 3.2. Single Variable Regression (6 Total)
+
+In the next step, we perform univariate analysis for all the factors we selected by running a simple linear regression of the smoothed daily data against the smoothed SP500 (both rn120). One of the six univariate analyses is coded as below.
+
+```{r, echo = TRUE, warning = FALSE, error = FALSE, tidy = TRUE}
+lm_gold <- lm(sp500_rn120 ~ gold_rn120, data = master)
+summary(lm_gold)
+```
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+lm_tb <- lm(sp500_rn120 ~ tbill_rn120, data = master)
+```
+ 
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+lm_oil <- lm(sp500_rn120 ~ oil_rn120, data = master)
+```
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+lm_fx <- lm(sp500_rn120 ~ fx_rn120, data = master)
+```
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+lm_interbank <- lm(sp500_rn120 ~ interbank_rn120, data = master)
+```
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+lm_prime <- lm(sp500_rn120 ~ prime_loan_rate, data = master)
+```
+
+After having yielded the six univariate analyses, we compare their adjusted-R Squared to intuitively visualize which factors, by themselves, provide stronger explanatory power to smoothed SP500. 
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+ats_unis<-data.frame(
+  model=c("gold","T bill","oil","fx","interbank","prime loan rate"),
+  adjusted_R_square=c(0.3355,0.4274,0.3676,0.01555,0.4321,0.0003966)
+)
+
+ggplot(ats_unis, aes(x = reorder(model, adjusted_R_square), y = adjusted_R_square)) + geom_bar(aes(fill = model), stat = "identity", width = 0.6) +
+  xlab("Model") + ylab("Adjusted R Square")+
+  coord_cartesian(ylim=c(0,0.5))+
+  ggtitle("Adjusted R Squared - Univariate")
+```
+
+By looking at the bar plot, we see that none of the factors were particularly strong by themselves, as the highest adjusted-R Squared only surpassed 40%. However, gold, oil, treasury bill and interbank rates all yielded adjusted-R Squared of around 30-40%, while FX and prime loan rates performed poorly on their own. 
+
+Now we plot univariate predictions of SP500 by each of the single linear regression models above against smoothed out SP500. This way we obtain a more straightforward sense of the explanatory power of each factor, as the more the predicted curve aligns with the actual SP500 smoothed curve, the stronger the factor is.
+
+### 3.2.1. Univariate Plotting
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+master$tb_predict <- predict(lm_tb, master)
+master$gold_predict <- predict(lm_gold, master)
+master$oil_predict <- predict(lm_oil, master)
+master$interbank_predict <- predict(lm_interbank, master)
+master$fx_predict <- predict(lm_fx, master)
+master$prime_predict <- predict(lm_prime, master)
+```
+
+One of the six univariate prediction plots is as below for example.
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+ggplot() + 
+  geom_line(data = master, aes(x = master$DATE, y = master$sp500_rn120, group = 1), color = "red") +
+  geom_line(data = master, aes(x = master$DATE, y = master$gold_predict, group = 1), color = "orange") +
+  xlab('date') +
+  ylab('sp500') +
+  ggtitle("Gold Predicts")
+```
+
+By looking at the six plots, we will see that none of them strongly align with the smoothed SP500. This is expected, as the highest of our univariate adjusted-R Squared is only slightly higher than 40%. Though 40% is considered strong for a single factor, the yielded prediction will certainly deviate much from the actual data.
+
+Note that due to interbank rate having a higher univariate adjusted-R Squared than treasury bill rate, we will take out treasury bill rate from our models from this point on. Also it is worth noting that univariate analysis does not qualify for including or excluding any factors, as while a factor does not possess strong explanatory power by itself, it may provide significant \textit{additional} explanatory power when put into a multivariate model.
+
+## 3.3 Grouped Regressions
+
+Having completed univariate analysis, we move on to applying not one, but multiple factors to explain SP500. Considering the nature of our factor selection -- that is, having chosen both monetary and commodity factors, we group our factors accordingly and test their aggregated explanatory power.
+We perform multiple linear regression on all the monetary factors (interbank rate and prime loan rate), and all the commodity factors (gold, oil, FX).
+
+```{r, echo = TRUE, warning = FALSE, error = FALSE, tidy = TRUE}
+lm_monetary <- lm(sp500_rn120 ~ interbank_rn120 + prime_loan_rate, data = master)
+lm_commodities<-lm(sp500_rn120 ~ gold_rn120 + oil_rn120 + fx_rn120, data = master)
+```
+
+Having yielded the three linear regression models, we -- again -- use a bar plot to compare the adjusted-R Squared values of the three models to visualize which sector provides higher explanatory power towards the smoothed SP500.
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+ats_cat<-data.frame(
+  model=c("monetary","commodities"),
+  adjusted_R_square=c(0.4345,0.5646)
+)
+
+ggplot(ats_cat, aes(x = reorder(model, adjusted_R_square), y = adjusted_R_square)) + geom_bar(aes(fill = model), stat = "identity", width = 0.7) +
+  xlab("Model") + ylab("Adjusted R Square") +
+  coord_cartesian(ylim=c(0.4,0.6)) +
+  ggtitle("Adjusted R Squared by Category")
+```
+
+By looking at the bar plot, we can see that the commodity sector provides better explanatory power as a whole. 
+
+Then we plot the multivariate predictions for both sector models against the smoothed SP500 to visualize the explanatory power of each combination of factors. By looking at how closely each predicted curve aligns with the actual smoothed SP500 curve, we get an intuition of how strong the corresponding group of factors are.
+
+### 3.3.1. Grouped Regressions Plotting
+
+```{r, echo = TRUE, warning = FALSE, error = FALSE, tidy = TRUE}
+master$monetary_predict <- predict(lm_monetary, master)
+master$commodities_predict <- predict(lm_commodities, master)
+```
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+ggplot() + 
+  geom_line(data = master, aes(x = master$DATE, y = master$sp500_rn120), color = "red") +
+  geom_line(data = master, aes(x = master$DATE, y = master$monetary_predict), color = "orange") +
+  xlab('date') +
+  ylab('sp500') +
+  ggtitle("Monetary Predicts")
+```
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+ggplot() + 
+  geom_line(data = master, aes(x = master$DATE, y = master$sp500_rn120), color = "red") +
+  geom_line(data = master, aes(x = master$DATE, y = master$commodities_predict), color = "brown") +
+  xlab('date') +
+  ylab('sp500') +
+  ggtitle("Commodity Predicts")
+```
+
+By looking at the two plots, we see that the results align with their adjusted-R Squared values. Again, neither of them align with SP500 in a particularly close fit (although arguably, the commodities group is starting to show a rough trend that fits somewhat with the original data), as again, though an adjusted-R Squared of 40-50% is satisfactory in attempting to explain a complicated composition that is the SP500, the prediction it provides would still be significantly different from the actual data by definition.
+
+Note that both multivariate analyses have yielded stronger explanatory power than any of the univariate analyses. Thus we can feel free to conclude that none of the factors by themselves could entirely capture the effect of an entire macroeconomic sector on the SP500.
+
+## 3.4. Including All Factors
+
+After completing both univariate analysis and grouped-factor analysis, so far we have concluded that treasury bill rates should be removed, and commodities seem to possess stronger explanatory power. We logically proceed onto trying to include factors from both sectors and determine what the finalized explanatory model should be.
+
+### 3.4.1. Excluding Single Factors
+
+First of all, before including all factors, we know that models with more predictors always have a higher R-Squared, hence higher explanatory power. Although we have accounted for this by having always examined the adjusted-R Squared value, we take a step forward to ensure all our factors are vital to be included in the model. To do this, we exclude one factor from the model at a time, and calculated the RMSE to evaluate the performance of the model. Then we compare the RMSE to the RMSE of the entire model with all factors.
+
+Below is one instance of excluding one factor from the model, and the wholesome model.
+
+```{r, echo = TRUE, warning = FALSE, error = FALSE, tidy = TRUE}
+lm_ex_prime <- lm(sp500_rn120 ~ interbank_rn120 + gold_rn120 + oil_rn120 + fx_rn120, data = master)
+lm_all <- lm(sp500_rn120 ~ interbank_rn120 + gold_rn120 + oil_rn120 + fx_rn120 + prime_loan_rate, data = master)
+```
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+lm_ex_gold <- lm(sp500_rn120 ~ interbank_rn120 + oil_rn120 + fx_rn120 + prime_loan_rate, data = master)
+lm_ex_interbank <- lm(sp500_rn120 ~ gold_rn120 + oil_rn120 + fx_rn120 + prime_loan_rate, data = master)
+lm_ex_oil <- lm(sp500_rn120 ~ interbank_rn120 + gold_rn120 + fx_rn120 + prime_loan_rate, data = master)
+lm_ex_fx <- lm(sp500_rn120 ~ interbank_rn120 + gold_rn120 + prime_loan_rate + oil_rn120, data = master)
+```
+
+Having the linear models, we calculate their RMSEs.
+
+```{r, echo = TRUE, warning = FALSE, error = FALSE, tidy = TRUE}
+rmse_all <- sqrt(c(crossprod(lm_all$residuals)) / length(lm_all$residuals))
+rmse_prime <- sqrt(c(crossprod(lm_ex_prime$residuals)) / length(lm_ex_prime$residuals))
+rmse_gold <- sqrt(c(crossprod(lm_ex_gold$residuals)) / length(lm_ex_gold$residuals))
+rmse_interbank <- sqrt(c(crossprod(lm_ex_interbank$residuals)) / length(lm_ex_interbank$residuals))
+rmse_oil <- sqrt(c(crossprod(lm_ex_oil$residuals)) / length(lm_ex_oil$residuals))
+rmse_fx <- sqrt(c(crossprod(lm_ex_fx$residuals)) / length(lm_ex_fx$residuals))
+
+rmse_plot<-data.frame(model = c("all_factors","ex_fx","ex_prime","ex_interbank","ex_gold","ex_oil"),rmse_value = c(rmse_all,rmse_fx,rmse_prime,rmse_interbank,rmse_gold,rmse_oil))
+```
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+ggplot(rmse_plot, aes(x = reorder(model, rmse_value), y = rmse_value)) + geom_bar(aes(fill = model), stat = "identity", width = 0.7) +
+  xlab("Model") + ylab("RMSE")+
+  coord_cartesian(ylim=c(300,400))+
+  ggtitle("RMSE Comparison: One-less-factor Models")
+```
+
+By plotting their respective RMSE values into a bar plot, we can see that all RMSE values after removing a factor are larger than that of the original, wholesome model. After removing oil and gold as explanatory factors, there is a significant increase in RMSE, hence a decrease in the model's explanatory power. 
+
+**Thus, we can comfortably conclude that all factors are needed in the model.**
+
+We thus perform multiple linear regressions that include all five factors as explanatory factors against the SP500.
+
+### 3.4.2. Comparing Differently Processed All-Factor Models
+
+From relevant literature we've examined, there are several ways to process time series macroeconomic and financial data. Thus, we compare five different types of processed data: original, smoothed, rate of change, logged-smoothed, and one-lagged difference to see if other methods of data manipulation reveal stronger relationships than our moving average smoothing.
+
+The respective models are coded as below.
+
+```{r, echo = TRUE, warning = FALSE, error = FALSE, tidy = TRUE}
+lm_all_pre_smoothing <- lm(sp500 ~ us_interbank_rate  + gold_price + crude_oil +fx_index + prime_loan_rate, data = master)
+
+lm_all_roc<-lm(sp500_returns ~ us_interbank_rate + gold_price_roc + crude_oil_roc + fx_index + prime_loan_rate, data = master)
+
+lm_all_lg_smoothed<-lm(log10(sp500_rn120) ~ interbank_rn120 + gold_rn120 + oil_rn120 + fx_rn120 + prime_loan_rate, data = master)
+
+lm_first_difference <- lm((sp500-lag(sp500)) ~ (us_interbank_rate - lag(us_interbank_rate))  + (gold_price - lag(gold_price)) + (crude_oil - lag(crude_oil)) +(fx_index - lag(fx_index)) + (prime_loan_rate - lag(prime_loan_rate)), data = master)
+```
+
+Having created all five linear models with all factors included, we compare their adjusted-R Squared values. We see that the logged-smoothed model explains the highest percentage of the variability of SP500 around its mean, and the moving-average-smoothed model is closely behind by a neglectable 1-2%.
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+ats_alls<-data.frame(
+  model=c("smoothed","unsmoothed","rates of change","log10 smoothed", "first differences"),
+  adjusted_R_square=c(0.619,0.5647,0.0002539,0.6297, 0.0007244)
+)
+
+ggplot(ats_alls, aes(x = reorder(model, adjusted_R_square), y = adjusted_R_square)) + geom_bar(aes(fill = model), stat = "identity", width = 0.7) +
+  xlab("Model") + ylab("Adjusted R Square")+
+  coord_cartesian(ylim=c(0.5,0.65))+
+  ggtitle("Adjusted R Squared by data transformation")
+```
+
+As we have done in the previous analyses, we plot the predictions of SP500 yielded by each version of the all-factor model against the original SP500. For the first-differences model, we plot its predictions against the first-differences of the original SP500. With the conclusion above that the logged-smoothed model yields the most explanatory power, we single out that model and see how it aligns with the smoothed SP500.
+
+### 3.4.3. Plotting Differently Processed All-Factor Models
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+master$all_factors_predict <- predict(lm_all, master)
+master$all_unsmoothed_predict <- predict(lm_all_pre_smoothing, master)
+master$all_roc_predict <- predict(lm_all_roc, master)
+master$all_lg_predict <- predict(lm_all_lg_smoothed, master)
+master$all_first_difference_predict <- predict(lm_first_difference, master)
+
+ggplot(master, aes(x=DATE)) + 
+ geom_line(aes(y = sp500_rn120, color = "SP500 Smoothed", group = 1)) +
+ geom_line(aes(y = all_factors_predict, color = "all_factors_predict", group = 1)) +
+ geom_line(aes(y = all_unsmoothed_predict, color = "all_unsmoothed_predict", group = 1)) +
+ geom_line(aes(y = 10^(all_lg_predict), color = "all_log_10", group = 1)) +
+ scale_y_log10(
+   "logged", sec.axis = sec_axis(~., name = "original")) +
+  ggtitle("Comparison of Data Transformation Techniques")
+
+ggplot(master, aes(x=DATE)) +
+  geom_line(aes(y = sp500_diff, color = "SP500 First Difference", group = 1)) +
+  geom_line(aes(y = all_first_difference_predict, color = "First Difference Predict", group = 1))
+```
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+ggplot(master, aes(x=DATE)) + 
+ geom_line(aes(y = sp500_rn120, color = "SP500 Smoothed", group = 1)) +
+ geom_line(aes(y = 10^(all_lg_predict), color = "all_log_10", group = 1)) +
+ scale_y_log10(
+   "logged", sec.axis = sec_axis(~., name = "original")) +
+  ggtitle("Best Fitted Model: Logged")
+
+```
+
+As we can see from the two plots, the logged-smoothed version of the all-factors-included model is the most explanatory for the value of SP500. (And the first-difference model with a 0.0007 adjusted-R Squared is particularly atrocious...) This is exemplified in not only the visualizations, but also the adjusted-R Squared of 63%. At this point, it is relatively clear that the prediction curve fits decently alongside the smoothed SP500 curve.
+
+At last, we plot our model (also moving average smoothed, but not logged) as well to intuitively see how it performs.
+
+```{r, echo = FALSE, warning = FALSE, error = FALSE, tidy = TRUE}
+ggplot(master, aes(x=DATE)) + 
+ geom_line(aes(y = sp500_rn120, color = "SP500 Smoothed", group = 1)) +
+ geom_line(aes(y = all_factors_predict, color = "all_factors_predict", group = 1)) +
+  ggtitle("Our Model: Moving Average Smoothed")
+```
+
+Judging from the graph, our not-logged model, though slightly lower in terms of adjusted-R Squared, also provides satisfactory explanatory power.
+
+# 4. Conclusion
+In conclusion of the project, we conclude that a combination of five of the six macroeconomic factors we selected provide satisfactory explanatory power of the smoothed SP500. While a logged version of this model provides the optimized adjusted-R Squared of 63%, our own not-logged model also has an adjusted-R Squared of 62%.
+
+```{r}
+summary(lm_all)
+```
+
+Showing our own final model again, we see that interbank rate and gold are negatively correlated with smoothed SP500. This is also an interesting note that makes sense, as 1. higher interbank rates would discourage investments and 2. higher gold prices may indicate larger demand for safe haven securities, hence meaning low investor optimism for the stock market.
+
+## 4.1. Significance and Application
+Granted, the explanatory power of this set of predictors is limited. This is hardly surprising. If explaining the stock index is this easy, there wouldn't be need for an entire Wall Street to relentlessly follow, model, explain and predict why something happened and what will happen in the stock markets. Nevertheless, we believe the findings of this analysis is meaningful in certain ways as it reveals the relatively strong connection between commodities prices and stock market returns. Following this lead, we can conduct more statistical analysis to explore a broader set of commodities and their relationship with stock indices, as well as macroeconomic research to try to understand the underlying economic mechanism.
+
+## 4.2. Potential Improvements and Concession
+
+### 4.2.1. More Macroeconomic Variables?
+Aside from the six macroeconomic factors we selected, there are many more indicators of the various sectors in macroeconomics. For instance, aggregate company profit would be a strong explanatory factor/predictor of the SP500. 
+
+However, a common hindrance for economic data is its lack of frequency. In this project we selected only macroeconomic variables that were available in the form of daily data, and thus forfeitted the many more that only were available on a monthly, quarterly, or even annual basis. We concede that by examining the relationship between monthly, quarterly and annual SP500 data and macroeconomic factors, we should be able to reveal more information about what affects the value of the SP500 index.
+
+### 4.2.2. Intrinsically Correlated Nature of Macroeconomic Data
+Although having performed a set of correlation tests for our factors, we believe there might still be undiscovered relationships between them. This is due to what we understand to be part of the intrinsic nature of macroeconomics: no indicator/statistic is standalone. Apart from the intuitive relationship between factors in the same sector, cross-sector influence is also prevalent.
+
+For instance, oil price as a commodity is one of the cornerstone of U.S. industrials. Depending on the portion the industrials sector takes up in the economy, the government could potentially adjust federal funds rates to encourage or discourage investments accordingly. Thus, crude oil price may remotely influence interbank rates. While the magnitude of this influence is undetermined, the logic should hold.
+
+A potential improvement in this regard would be stricter statistical testing for multicollinearity, e.g. variance inflation factor (VIF).
+
+### 4.2.3. More Sophisticated Time Series Analysis
+Another way to add more rigor to this exploration is to deploy more sophisticated time series analyses. In the process we have tried to to use **Hodrick-Prescott filter** to detect cycles in time series, but our lack of understanding of the mechanism of the model posed difficulties in choosing the right frequency (one of the required parameters). 
+
+In future continuations of this exploration, we could use **lead-lag analysis** to detect if, for example, gold price today can explain the stock price next week, the *autoregression model* to test for cycles, and/or more adequate transformation(**first difference**/**natural log**, etc.) to make all time series stationary before regression.
+
+
